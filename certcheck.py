@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-
+import os
 from os import path
 from sys import argv, stderr
-from requests_cache import CachedSession
+from requests_cache import CachedSession, SQLiteCache
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 
-session = CachedSession()
-session.settings.expire_after = 3600
 
 certdomains = []
+cachepath = "."
 readable = False
 filterdays = 30
 
@@ -18,9 +17,16 @@ if len(argv) > 1:
     certdomains = argv[1:]
 elif path.islink(__file__):
     certdomains = [path.basename(__file__)]
+    cachepath = path.dirname(os.readlink(__file__))
 else:
     print("No domains specified", file=stderr)
     exit(1)
+if cachepath == "":
+    cachepath = "."
+backend = SQLiteCache(cachepath+"/http_cache.sqlite")
+session = CachedSession(backend=backend)
+session.settings.expire_after = 3600
+
 
 def parsedata(data: dict) -> dict:
     certs = {}
