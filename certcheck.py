@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 certdomains = []
 cachepath = "."
 readable = False
-filterdays = 30
+filterdays = 7
 
 if len(argv) > 1:
     readable = True
@@ -47,7 +47,7 @@ def readable_output(certs: dict) -> None:
     for name, cert in certs.items():
         if cert['not_after'] > datetime.now() + timedelta(days=7):
             color = Fore.GREEN
-        elif cert['not_after'] > datetime.now():
+        elif cert['not_after'] > datetime.now() + timedelta(days=1):
             color = Fore.YELLOW
         else:
             color = Fore.RED
@@ -63,7 +63,7 @@ def checkmk(certs: dict, domainname) -> None:
         if cert['not_after'] > datetime.now() + timedelta(days=7):
             certsok += 1
             output += f"{name}: {cert['not_after']} (OK)\\n"
-        elif cert['not_after'] > datetime.now():
+        elif cert['not_after'] > datetime.now() + timedelta(days=1):
             certswarn += 1
             output += f"{name}: {cert['not_after']} (WARN)\\n"
         else:
