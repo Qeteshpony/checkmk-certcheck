@@ -37,11 +37,12 @@ if cachepath == "":  # workaround for when the link is the same directory as the
 
 # Session Settings
 backend = SQLiteCache(cachepath+"/http_cache.sqlite")
-session = CachedSession(backend=backend,
-                        stale_if_error=3600,  # if the server does return an error use cached data for max 1 hour
-                        stale_while_revalidate=120,  # use old values while getting a new response to speed it up
-                        )
-session.settings.expire_after = 3600  # it should be enough to refresh this once an hour
+session = CachedSession(
+    backend=backend,
+    expire_after=3600,  # it should be enough to refresh data once an hour
+    stale_if_error=3600,  # if the server does return an error, use cached data for max 1 hour
+    stale_while_revalidate=600,  # use old values while getting a new response to speed things up
+)
 
 def parsedata(data: dict) -> dict:
     """
