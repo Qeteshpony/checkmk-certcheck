@@ -2,5 +2,13 @@
 
 Just copy the script to your machine, make sure the requirements are met and make it executable. 
 
-You can then either call it directly with `certcheck <domain>` or create symlinks with just the domain name as the name
-linking to the script in `/usr/lib/check_mk_agent/local` to create a service for checkmk
+### Manual check
+Call the script directly with `certcheck <domain>` to get an overview of all certificates under that domain
+
+### checkmk
+
+Create symlinks to this script with just the domain name as the name in `/usr/lib/check_mk_agent/local`
+
+This will create one service per domain showing the state of all certificates under that domain, 
+switching to WARN when any certificates are valid for less than a week and to critical if any are 
+valid less than a day.
