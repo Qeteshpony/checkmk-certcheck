@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import os
+import logging
 from os import path
 from sys import argv, stderr
 from requests_cache import CachedSession, SQLiteCache
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 
-
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(levelname)s:%(message)s',
+                    datefmt='%m/%d/%Y %I:%M:%S %p')
 certdomains = []
 cachepath = "."
 readable = False
@@ -78,7 +81,7 @@ def checkmk(certs: dict, domainname) -> None:
     print(f'{status} "Certificate Validity {domainname}" {metric} {output}')
 
 for domain in certdomains:
-    response = session.get(f"https://crt.sh/json?identity={domain}", timeout=5)
+    response = session.get(f"https://crt.sh/json?identity={domain}", timeout=30)
     if response.status_code == 200:
         res = response.json()
         parsed = parsedata(res)
@@ -86,6 +89,9 @@ for domain in certdomains:
             readable_output(parsed)
         else:
             checkmk(parsed, domain)
+    else:
+        logging.error(f"Cert-data for {domain} can't be loaded. Status: {response.status_code}: {response.text}")
+        exit(1)
 
 
 
