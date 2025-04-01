@@ -25,7 +25,7 @@ if len(argv) > 1:  # we got command line options - use those
     readable = True  # in this case we want human readable output
     certdomains = argv[1:]
 elif path.islink(__file__):  # no command line options but we're linked from somewhere so we assume its checkmk time
-    certdomains = [path.basename(__file__)]  # get filename to determain the domain
+    certdomains = path.basename(__file__).split(",")  # get filename to determain the domains
     if cachepath == ".":  # only if the cache path is set to "." we want it to be the directory of the script
         cachepath = path.dirname(os.readlink(__file__))  # get path of the original file for cache location
 else:  # can't do anything without knowing what domain to check
@@ -77,11 +77,11 @@ def readable_output(certs: dict) -> None:
             color = Fore.RED
         print(f"{name}: {color}{cert.get('not_after')}{Style.RESET_ALL}")
 
-def checkmk(certs: dict, domainname) -> None:
+def checkmk(certs: dict, domainnames: list) -> None:
     """
     Create checkmk compatible output
     :param certs: dictionary of certificates
-    :param domainname: name of the parsed domain
+    :param domainnames: name of the parsed domain
     """
     status = 0
     output_ok = []
@@ -102,7 +102,7 @@ def checkmk(certs: dict, domainname) -> None:
     if len(output_crit):
         status = 2
 
-    print(f'{status} "Certificate Validity {domainname}" ', end="")  # print the status and service name
+    print(f'{status} "Certificate Validity {", ".join(domainnames)}" ', end="")  # print the status and service name
     print(f"OK={len(output_ok)}|WARN={len(output_warn)}|CRIT={len(output_crit)} ", end="")  # print the metric
     for line in output_crit:  # print all the critical ones first
         print(line + "\\n", end="")
@@ -116,18 +116,20 @@ def main() -> None:
     """
     Run this when the script was invoked on the command line
     """
+    parsed = {}
     for domain in certdomains:   # go through all domains in the list
         response = session.get(f"https://crt.sh/json?identity={domain}", timeout=10)  # get data from crt.sh
         if response.status_code == 200:  # check response code - we only go on when it was 200
             res = response.json()  # turn the response into a dictionary
-            parsed = parsedata(res)  # parse the data
-            if readable:  # create human readable output
-                readable_output(parsed)
-            else:  # create output for checkmk
-                checkmk(parsed, domain)
+            parsed.update(parsedata(res))  # parse the data
         else:  # any other status code is a problem
             logging.error(f"Cert-data for {domain} can't be loaded. Status: {response.status_code}: {response.text}")
             exit(1)
+    if readable:  # create human readable output
+        readable_output(parsed)
+    else:  # create output for checkmk
+        checkmk(parsed, certdomains)
+
 
 if __name__ == "__main__":
     main()
