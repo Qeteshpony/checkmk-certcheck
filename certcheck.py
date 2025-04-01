@@ -7,14 +7,18 @@ from requests_cache import CachedSession, SQLiteCache
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 
+# Use config.py if it exists, else use config_default.py
+try:
+    from config import config
+except ImportError:
+    from config_default import config
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s:%(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
-filterdays = 7  # filter out all certficates that are invalid for more than this since they are kept in the log forever
-
+cachepath = config.get("CACHEPATH")
 certdomains = []
-cachepath = "."
 readable = False
 
 if len(argv) > 1:  # we got command line options - use those
@@ -22,7 +26,8 @@ if len(argv) > 1:  # we got command line options - use those
     certdomains = argv[1:]
 elif path.islink(__file__):  # no command line options but we're linked from somewhere so we assume its checkmk time
     certdomains = [path.basename(__file__)]  # get filename to determain the domain
-    cachepath = path.dirname(os.readlink(__file__))  # get path of the original file for cache location
+    if cachepath == ".":  # only if the cache path is set to "." we want it to be the directory of the script
+        cachepath = path.dirname(os.readlink(__file__))  # get path of the original file for cache location
 else:  # can't do anything without knowing what domain to check
     print("No domains specified", file=stderr)
     exit(1)
@@ -54,7 +59,7 @@ def parsedata(data: dict) -> dict:
         not_after = cert["not_after"]
         if ((cert_name not in certs.keys() or  # if cert is not in the list
                 not_after > certs.get(cert_name).get("not_after")) and  # or newer
-                not_after > datetime.now() - timedelta(days=filterdays)):  # unless it is older than 30 days
+                not_after > datetime.now() - timedelta(days=config.get("FILTERDAYS"))):  # unless it is too old
             certs[cert_name] = cert  # then add or overwrite it
     return certs
 
@@ -105,7 +110,7 @@ def checkmk(certs: dict, domainname) -> None:
         print(line + "\\n", end="")
     for line in output_ok:  # and last the ok ones
         print(line + "\\n", end="")
-    print(f"Showing only certificates that are less than {filterdays} days overdue.")  # informational line
+    print(f"Showing only certificates that are less than {config.get('FILTERDAYS')} days overdue.")  # info line
 
 def main() -> None:
     """
