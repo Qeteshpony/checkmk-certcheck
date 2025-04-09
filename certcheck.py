@@ -40,7 +40,7 @@ backend = SQLiteCache(cachepath+"/http_cache.sqlite")
 session = CachedSession(
     backend=backend,
     expire_after=3600,  # it should be enough to refresh data once an hour
-    stale_if_error=3600,  # if the server does return an error, use cached data for max 1 hour
+    stale_if_error=3600*12,  # if the server does return an error, use cached data for max 12 hours
     stale_while_revalidate=600,  # use old values while getting a new response to speed things up
 )
 
