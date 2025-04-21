@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-import os
 import logging
-from os import path
+from os import path, readlink
 from sys import argv, stderr
 from requests_cache import CachedSession, SQLiteCache
 from colorama import Fore, Style
@@ -14,10 +13,16 @@ except ImportError:
     from config_default import config
 
 logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)s:%(message)s',
+                    format='%(asctime)s %(levelname)s(%(name)s): %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
-cachepath = config.get("CACHEPATH")
+while "-d" in argv:
+    logging.getLogger().setLevel(logging.DEBUG)
+    argv.remove("-d")
+
+cachepath = config.get("CACHEPATH", "/run")
+filterdays = config.get("FILTERDAYS", 7)
+excludefile = config.get("EXCLUDEFILE", "excludecert.txt")
 certdomains = []
 readable = False
 
@@ -26,8 +31,9 @@ if len(argv) > 1:  # we got command line options - use those
     certdomains = argv[1:]
 elif path.islink(__file__):  # no command line options but we're linked from somewhere so we assume its checkmk time
     certdomains = path.basename(__file__).split(",")  # get filename to determain the domains
+
     if cachepath == ".":  # only if the cache path is set to "." we want it to be the directory of the script
-        cachepath = path.dirname(os.readlink(__file__))  # get path of the original file for cache location
+        cachepath = path.dirname(readlink(__file__))  # get path of the original file for cache location
 else:  # can't do anything without knowing what domain to check
     print("No domains specified", file=stderr)
     exit(1)
@@ -44,9 +50,10 @@ session = CachedSession(
     stale_while_revalidate=600,  # use old values while getting a new response to speed things up
 )
 
-def parsedata(data: dict) -> dict:
+def parsedata(data: dict, excludes: list) -> dict:
     """
     Let's go through the data we got and parse it
+    :param excludes: excluded domains
     :param data: dictionary of all certificates for the speicied domain
     :return: dictionary of all current certificates for the specified domain
     """
@@ -60,8 +67,10 @@ def parsedata(data: dict) -> dict:
         not_after = cert["not_after"]
         if ((cert_name not in certs.keys() or  # if cert is not in the list
                 not_after > certs.get(cert_name).get("not_after")) and  # or newer
-                not_after > datetime.now() - timedelta(days=config.get("FILTERDAYS"))):  # unless it is too old
+                not_after > datetime.now() - timedelta(days=filterdays) and  # unless it is too old
+                cert_name not in excludes):  # or excluded manually
             certs[cert_name] = cert  # then add or overwrite it
+    logging.debug(f"{len(certs)} certificate(s) left after filtering")
     return certs
 
 def readable_output(certs: dict) -> None:
@@ -111,18 +120,34 @@ def checkmk(certs: dict, domainnames: list) -> None:
         print(line + "\\n", end="")
     for line in output_ok:  # and last the ok ones
         print(line + "\\n", end="")
-    print(f"Showing only certificates that are less than {config.get('FILTERDAYS')} days overdue.")  # info line
+    print(f"Showing only certificates that are less than {filterdays} days overdue.")  # info line
+
+def readexcludes() -> list:
+    certnames = []
+    excludefilepath = path.dirname(__file__)+"/"+excludefile
+    if path.isfile(excludefilepath):  # check if the excludes file exists
+        logging.debug(f"Reading excluded certnames from {excludefilepath}")
+        with open(excludefilepath) as f:
+            for certname in f.read().splitlines():  # read all lines and iterate over them
+                certname = certname.strip()  # remove whitespace
+                if not certname.startswith("#") and certname:  # filter comments and empty lines
+                    logging.debug(f"Adding certname {certname} to excludes list")
+                    certnames.append(certname)
+    return certnames
 
 def main() -> None:
     """
     Run this when the script was invoked on the command line
     """
     parsed = {}
+    excludes = readexcludes()
     for domain in certdomains:   # go through all domains in the list
+        logging.debug(f"Getting data for {domain}")
         response = session.get(f"https://crt.sh/json?identity={domain}", timeout=10)  # get data from crt.sh
         if response.status_code == 200:  # check response code - we only go on when it was 200
             res = response.json()  # turn the response into a dictionary
-            parsed.update(parsedata(res))  # parse the data
+            logging.debug(f"Got data for {len(res)} certificates")
+            parsed.update(parsedata(res, excludes))  # parse the data
         else:  # any other status code is a problem
             logging.error(f"Cert-data for {domain} can't be loaded. Status: {response.status_code}: {response.text}")
             exit(1)

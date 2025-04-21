@@ -25,3 +25,6 @@ ln -s <script-path>/certcheck.py example.com,example.org
 This will create one service per symlink, showing the state of all certificates under the listed domains, 
 switching to WARN when any certificates are valid for less than a week and to critical if any are 
 valid less than a day.
+
+You can exclude single certificates from the check by creating a file named "certexclude.txt" in the same location
+as the link and list all excluded certs, one per line.
