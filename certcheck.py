@@ -143,7 +143,7 @@ def main() -> None:
     excludes = readexcludes()
     for domain in certdomains:   # go through all domains in the list
         logging.debug(f"Getting data for {domain}")
-        response = session.get(f"https://crt.sh/json?identity={domain}", timeout=10)  # get data from crt.sh
+        response = session.get(f"https://crt.sh/json?identity={domain}", timeout=30)  # get data from crt.sh
         if response.status_code == 200:  # check response code - we only go on when it was 200
             res = response.json()  # turn the response into a dictionary
             logging.debug(f"Got data for {len(res)} certificates")
