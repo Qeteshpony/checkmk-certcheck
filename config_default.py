@@ -5,4 +5,5 @@ config = {
                           # Default: "/run" which is useful for checkmk
     "FILTERDAYS": 7,  # Filter out any certs older than x days. Default: 7
     "EXCLUDEFILE": "excludecerts.txt",  # file name for the excludes file
+    "TIMEOUT": 30,  # timeout for crt.sh responses
 }
