@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import logging
-import sqlite3
 from pathlib import Path
 from sys import argv, stderr
 from colorama import Fore, Style
 from datetime import datetime, timedelta
-import crtsh
+from crtsh import db, open_subprocess
 
 # Use config.py if it exists, else use config_default.py
 try:
@@ -13,20 +12,19 @@ try:
 except ImportError:
     from config_default import config
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)s(%(name)s): %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
+loglevel = logging.INFO
 
 while "-d" in argv:
-    logging.getLogger().setLevel(logging.DEBUG)
+    loglevel = logging.DEBUG
     argv.remove("-d")
+
+logging.basicConfig(level=loglevel,
+                    format='%(asctime)s %(levelname)s(%(name)s): %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 filterdays = config.get("FILTERDAYS", 7)
 excludefile = config.get("EXCLUDEFILE", "excludecert.txt")
 
-scriptpath = Path(__file__).readlink().parent if Path(__file__).is_symlink() else Path(__file__).parent
-dbfile = scriptpath / config.get("DATABASEFILE", "certs.sqlite")
-logging.debug(f"dbfile: {dbfile}")
 certdomains = []
 readable = False
 
@@ -39,15 +37,6 @@ else:  # can't do anything without knowing what domain to check
     print("No domains specified", file=stderr)
     exit(1)
 
-db_init = not dbfile.is_file()  # check if the db needs initialization
-db = sqlite3.connect(dbfile)
-db.row_factory = sqlite3.Row
-
-if db_init:
-    # init database
-    with open(scriptpath / "certs_structure.sql") as f:
-        db.executescript(f.read())
-    db.commit()
 
 def readable_output(certs: dict) -> None:
     """
@@ -143,7 +132,7 @@ def main() -> None:
     Run this when the script was invoked on the command line
     """
     # call sub process to update the database in the background
-    crtsh.open_subprocess(certdomains)
+    open_subprocess(certdomains)
 
     certs = {}
     excludes = readexcludes()
@@ -154,6 +143,7 @@ def main() -> None:
         readable_output(certs)
     else:  # create output for checkmk
         checkmk(certs, certdomains)
+    db.close()
 
 
 if __name__ == "__main__":

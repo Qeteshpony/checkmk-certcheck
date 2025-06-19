@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import logging
 from sys import argv
-import sqlite3
+from db import db
 from pathlib import Path
 
 # Use config.py if it exists, else use config_default.py
@@ -14,19 +14,12 @@ try:
 except ImportError:
     from config_default import config
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)s(%(name)s): %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
-
-while "-d" in argv:
-    logging.getLogger().setLevel(logging.DEBUG)
-    argv.remove("-d")
+logger = logging.getLogger(__name__)
 
 cachepath = config.get("CACHEPATH", "/run")
 
 scriptpath = Path(__file__).readlink().parent if Path(__file__).is_symlink() else Path(__file__).parent
-dbfile = scriptpath / config.get("DATABASEFILE", "certs.sqlite")
-logging.debug(f"DB-File: {dbfile}")
+
 
 if cachepath == ".":
     cachepath = scriptpath
@@ -42,9 +35,6 @@ session = CachedSession(
     stale_if_error=3600*12,  # if the server does return an error, use cached data for max 12 hours
     stale_while_revalidate=3600,  # use old values while getting a new response to speed things up
 )
-
-db_init = not dbfile.is_file()  # check if the db needs initialization
-db = sqlite3.connect(dbfile)
 
 
 def iso_to_ts(iso_string: str) -> int:
@@ -71,7 +61,7 @@ def parsedata(data: dict, domain: str) -> None:
             "notbefore": cert["not_before"],
             "notafter": cert["not_after"],
         }
-        logging.debug(f"INSERT OR IGNORE: {cert}")
+        logger.debug(f"INSERT OR IGNORE: {cert}")
         cur.execute("""
             INSERT OR IGNORE INTO certs (serial, domain, name, notbefore, notafter) 
             VALUES (:serial, :domain, :name, :notbefore, :notafter)
@@ -83,20 +73,20 @@ def parsedata(data: dict, domain: str) -> None:
 
 def getdata(domains: list) -> None:
     for domain in domains:
-        logging.debug(f"Getting data for {domain}")
+        logger.debug(f"Getting data for {domain}")
         response = session.get(f"https://crt.sh/json?identity={domain}&exclude=expired", timeout=config["TIMEOUT"])
-        logging.debug(f"HTTP {response.status_code}: {response.text}")
+        logger.debug(f"HTTP {response.status_code}: {response.text}")
         if response.status_code == 200:  # check response code - we only go on when it was 200
             res = response.json()  # turn the response into a dictionary
-            logging.debug(f"Got data for {len(res)} certificates")
+            logger.debug(f"Got data for {len(res)} certificates")
             parsedata(res, domain)  # parse the data
         else:  # any other status code is a problem
-            logging.error(f"Cert-data for {domain} can't be loaded. Status: {response.status_code}: {response.text}")
+            logger.error(f"Cert-data for {domain} can't be loaded. Status: {response.status_code}: {response.text}")
 
 
 def open_subprocess(domains: list) -> None:
     commandlist = ["/usr/bin/env", "python3", str(Path(__file__).absolute()), *domains]
-    logging.debug(f"Opening subprocess with command: {' '.join(commandlist)}")
+    logger.debug(f"Opening subprocess with command: {' '.join(commandlist)}")
     subprocess.Popen(
         commandlist,
         stdout=subprocess.DEVNULL,
@@ -106,17 +96,14 @@ def open_subprocess(domains: list) -> None:
 
 
 def main():
+    while "-d" in argv:
+        logger.info("Setting loglevel to debug...")
+        logger.setLevel(logging.DEBUG)
+        argv.remove("-d")
+
     if len(argv) < 2:
-        logging.error(f"Usage: {argv[0]} <domain> [<domain> ...]")
+        logger.error(f"Usage: {argv[0]} <domain> [<domain> ...]")
         exit(1)
-
-    db.execute("PRAGMA journal_mode=WAL")
-
-    if db_init:
-        # init database
-        with open("certs_structure.sql") as f:
-            db.executescript(f.read())
-        db.commit()
 
     getdata(argv[1:])
 
