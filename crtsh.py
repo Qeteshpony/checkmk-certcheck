@@ -16,7 +16,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-cachepath = config.get("CACHEPATH", "/run")
+cachepath = Path(config.get("CACHEPATH", "/run"))
+
 
 scriptpath = Path(__file__).readlink().parent if Path(__file__).is_symlink() else Path(__file__).parent
 
@@ -101,6 +102,9 @@ def main():
         logger.info("Setting loglevel to debug...")
         logger.setLevel(logging.DEBUG)
         argv.remove("-d")
+
+    logging.basicConfig()
+    logger.debug(f"Cache path: {cachepath}")
 
     if len(argv) < 2:
         logger.error(f"Usage: {argv[0]} <domain> [<domain> ...]")
