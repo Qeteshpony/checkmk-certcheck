@@ -10,17 +10,26 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-scriptpath = Path(__file__).readlink().parent if Path(__file__).is_symlink() else Path(__file__).parent
-dbfile = scriptpath / config.get("DATABASEFILE", "certs.sqlite")
-logger.debug(f"DB-File: {dbfile}")
+class DB:
+    def __init__(self):
+        scriptpath = Path(__file__).readlink().parent if Path(__file__).is_symlink() else Path(__file__).parent
+        dbfilename = config.get("DATABASEFILE", "certs.sqlite")
+        if dbfilename.startswith("/"):
+            dbfile = Path(dbfilename)
+        else:
+            dbfile = scriptpath / dbfilename
+        logger.debug(f"DB-File: {dbfile}")
 
-db_init = not dbfile.is_file()  # check if the db needs initialization
-db = sqlite3.connect(dbfile)
-db.row_factory = sqlite3.Row
-db.execute("PRAGMA journal_mode=WAL")
+        db_init_needed = not dbfile.is_file()  # check if the db needs initialization
+        self.conn = sqlite3.connect(dbfile)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
 
-if db_init:
-    logger.debug(f"DB file does not exist at {dbfile}. Initializing...")
-    with open("certs_structure.sql") as f:
-        db.executescript(f.read())
-    db.commit()
+        if db_init_needed:
+            logger.debug(f"DB file does not exist at {dbfile}. Initializing...")
+            self._db_init()
+
+    def _db_init(self):
+        with open("certs_structure.sql") as f:
+            self.conn.executescript(f.read())
+        self.conn.commit()

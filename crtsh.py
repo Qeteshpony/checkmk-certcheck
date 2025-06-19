@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import logging
 from sys import argv
-from db import db
+from db import DB
 from pathlib import Path
 
 # Use config.py if it exists, else use config_default.py
@@ -20,6 +20,7 @@ cachepath = config.get("CACHEPATH", "/run")
 
 scriptpath = Path(__file__).readlink().parent if Path(__file__).is_symlink() else Path(__file__).parent
 
+db = DB().conn
 
 if cachepath == ".":
     cachepath = scriptpath

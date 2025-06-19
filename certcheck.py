@@ -4,7 +4,8 @@ from pathlib import Path
 from sys import argv, stderr
 from colorama import Fore, Style
 from datetime import datetime, timedelta
-from crtsh import db, open_subprocess
+from crtsh import open_subprocess
+from db import DB
 
 # Use config.py if it exists, else use config_default.py
 try:
@@ -21,6 +22,8 @@ while "-d" in argv:
 logging.basicConfig(level=loglevel,
                     format='%(asctime)s %(levelname)s(%(name)s): %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
+
+db = DB().conn
 
 filterdays = config.get("FILTERDAYS", 7)
 excludefile = config.get("EXCLUDEFILE", "excludecert.txt")
@@ -131,7 +134,7 @@ def main() -> None:
     """
     Run this when the script was invoked on the command line
     """
-    # call sub process to update the database in the background
+    # call sub processes to update the database in the background
     open_subprocess(certdomains)
 
     certs = {}
