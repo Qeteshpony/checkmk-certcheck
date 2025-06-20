@@ -51,23 +51,25 @@ def parsedata(data: dict, domain: str) -> None:
     """
     cur = db.cursor()
     cur.execute("BEGIN TRANSACTION")
-    for cert in data:
-        # convert timestamps into datetime objects
-        cert["not_before"] = iso_to_ts(cert["not_before"])
-        cert["not_after"] = iso_to_ts(cert["not_after"])
+    for entry in data:
         # store certs in database
         cert = {
-            "serial": cert["serial_number"],
+            "serial": entry["serial_number"],
             "domain": domain,
-            "name": str(cert["name_value"]).replace("\n", ", "),  # the certs are listed with \n's
-            "notbefore": cert["not_before"],
-            "notafter": cert["not_after"],
+            "name": str(entry["name_value"]).replace("\n", ", "),  # the certs are listed with \n's
+            "notbefore": iso_to_ts(entry["not_before"]),
+            "notafter": iso_to_ts(entry["not_after"]),
         }
-        logger.debug(f"INSERT OR IGNORE: {cert}")
-        cur.execute("""
-            INSERT OR IGNORE INTO certs (serial, domain, name, notbefore, notafter) 
-            VALUES (:serial, :domain, :name, :notbefore, :notafter)
-        """, cert)
+        logger.debug(f"parsing: {cert}")
+        cur.execute("SELECT name FROM certs WHERE serial = :serial AND domain = :domain", cert)
+        rows = cur.fetchall()
+        if not rows:
+            logger.debug("INSERT")
+            cur.execute("""
+                        INSERT INTO certs (serial, domain, name, notbefore, notafter) 
+                        VALUES (:serial, :domain, :name, :notbefore, :notafter)
+                        """,
+                        cert)
     cur.execute(f"INSERT OR REPLACE INTO lastupdates VALUES ('{domain}', {int(time.time())})")
     db.commit()
     cur.close()
@@ -76,7 +78,9 @@ def parsedata(data: dict, domain: str) -> None:
 def getdata(domains: list) -> None:
     for domain in domains:
         logger.debug(f"Getting data for {domain}")
-        response = session.get(f"https://crt.sh/json?identity={domain}&exclude=expired", timeout=config["TIMEOUT"])
+        url = f"https://crt.sh/json?identity={domain}&exclude=expired"
+        logger.debug(f"URL: {url}")
+        response = session.get(url, timeout=config["TIMEOUT"])
         logger.debug(f"HTTP {response.status_code}: {response.text}")
         if response.status_code == 200:  # check response code - we only go on when it was 200
             res = response.json()  # turn the response into a dictionary

@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS certs (
-    serial TEXT PRIMARY KEY,
+    serial TEXT NOT NULL,
     domain TEXT NOT NULL,
     name TEXT NOT NULL,
     notbefore INTEGER NOT NULL,
