@@ -30,7 +30,7 @@ valid less than a day.
 You can exclude single certificates from the check by creating a file named "certexclude.txt" in the same location
 as the link and list all excluded certs, one per line.
 
-### Caching
+# Caching
 
 The script uses two levels of caching: 
 
