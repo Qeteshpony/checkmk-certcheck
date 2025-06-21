@@ -70,7 +70,7 @@ def parsedata(data: dict, domain: str) -> None:
                         VALUES (:serial, :domain, :name, :notbefore, :notafter)
                         """,
                         cert)
-    cur.execute(f"INSERT OR REPLACE INTO lastupdates VALUES ('{domain}', {int(time.time())})")
+        cur.execute(f"INSERT OR REPLACE INTO lastupdates VALUES ('{domain}', {int(time.time())})")
     db.commit()
     cur.close()
 
@@ -78,7 +78,12 @@ def parsedata(data: dict, domain: str) -> None:
 def getdata(domains: list) -> None:
     for domain in domains:
         logger.debug(f"Getting data for {domain}")
-        url = f"https://crt.sh/json?identity={domain}&exclude=expired"
+        domain_exists = db.execute("SELECT 1 FROM certs WHERE domain = ? LIMIT 1", (domain,)).fetchone() is not None
+        url = f"https://crt.sh/json?identity={domain}"
+        if domain_exists:
+            url += "&exclude=expired"
+        else:
+            logger.debug(f"{domain} is not yet in database. Getting ALL historical data...")
         logger.debug(f"URL: {url}")
         response = session.get(url, timeout=config["TIMEOUT"])
         logger.debug(f"HTTP {response.status_code}: {response.text}")
