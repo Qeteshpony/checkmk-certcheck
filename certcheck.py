@@ -41,10 +41,11 @@ else:  # can't do anything without knowing what domain to check
     exit(1)
 
 
-def readable_output(certs: dict) -> None:
+def readable_output(certs: dict, domainnames: list) -> None:
     """
     Create a nice list of the parsed certificates and print it
     :param certs: parsed certificates
+    :param domainnames: names of the parsed domains
     """
     for name, cert in sorted(certs.items()):
         notafter = datetime.fromtimestamp(cert['notafter'])
@@ -58,12 +59,21 @@ def readable_output(certs: dict) -> None:
             # cert is about to become invalid or already is
             color = Fore.RED
         print(f"{name}: {color}{notafter}{Style.RESET_ALL}")
+    print("")
+    for domain in domainnames:
+        lastupdate = get_last_update(domain)
+        print(f"Last update for {domain}: "
+              f"{Fore.GREEN 
+                 if lastupdate is not None and lastupdate > datetime.now() - timedelta(days=1) 
+                 else Fore.YELLOW}"
+              f"{lastupdate}{Style.RESET_ALL}")
+
 
 def checkmk(certs: dict, domainnames: list) -> None:
     """
     Create checkmk compatible output
     :param certs: dictionary of certificates
-    :param domainnames: name of the parsed domain
+    :param domainnames: names of the parsed domains
     """
     status = 0
     output_ok = []
@@ -81,6 +91,13 @@ def checkmk(certs: dict, domainnames: list) -> None:
             # cert is about to become invalid or already is
             output_crit.append(f"{name}: {notafter} (CRIT)")
 
+    for domain in domainnames:
+        lastupdate = get_last_update(domain)
+        if lastupdate is not None and lastupdate > datetime.now() - timedelta(days=1):
+            output_ok.append(f"Last update for {domain}: {get_last_update(domain)}")
+        else:
+            output_warn.append(f"Last update for {domain}: {get_last_update(domain)}")
+
     # set status for checkmk
     if len(output_warn):
         status = 1
@@ -97,6 +114,16 @@ def checkmk(certs: dict, domainnames: list) -> None:
         print(line + "\\n", end="")
     print(f"Showing only certificates that are less than {filterdays} days overdue.")  # info line
 
+
+def get_last_update(domain: str) -> (datetime, None):
+    cur = db.execute("SELECT timestamp FROM lastupdates WHERE domain=?", (domain,))
+    result = cur.fetchall()
+    if len(result) == 0:
+        return None
+    else:
+        return datetime.fromtimestamp(result[0][0])
+
+
 def readexcludes() -> list:
     certnames = []
     excludefilepath = Path(__file__).parent / excludefile
@@ -110,6 +137,7 @@ def readexcludes() -> list:
                     certnames.append(certname)
     return certnames
 
+
 def getcerts(domain: str, excludes: list) -> dict:
     cur = db.cursor()
     cur.execute("""
@@ -117,10 +145,10 @@ def getcerts(domain: str, excludes: list) -> dict:
                     JOIN (
                         SELECT name, MAX(notafter) AS max_notafter
                         FROM certs
+                        WHERE domain = ? AND notafter > strftime('%s', 'now', '-7 days')
                         GROUP BY name
                     ) AS latest
                     ON c.name = latest.name AND c.notafter = latest.max_notafter
-                    WHERE c.domain = ?
                 """,
                 (domain,))
     certs = {}
@@ -139,11 +167,11 @@ def main() -> None:
 
     certs = {}
     excludes = readexcludes()
-    for domain in certdomains:   # go through all domains in the list
+    for domain in certdomains:  # go through all domains in the list
         logging.debug(f"Getting data for {domain}")
         certs.update(getcerts(domain, excludes))
     if readable:  # create human readable output
-        readable_output(certs)
+        readable_output(certs, certdomains)
     else:  # create output for checkmk
         checkmk(certs, certdomains)
     db.close()
